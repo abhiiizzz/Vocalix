@@ -1,24 +1,27 @@
 .navbar {
-    padding: 20px 0;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
+  padding: 20px 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
 .logoutButton {
-    background: none;
-    cursor: pointer;
+  background: none;
+  cursor: pointer;
 }
 
 .navRight {
-    display: flex;
-    align-items: center;
+  display: flex;
+  align-items: center;
 }
 
 .avatar {
-    border-radius: 50%;
-    object-fit: cover;
-    border: 3px solid #0077ff;
-    margin: 0 20px;
-    margin-right: 10px;
+  width: 50px; /* Example value */
+  height: 50px; /* Must match width */
+  border-radius: 50%; /* Makes it a circle */
+  object-fit: cover; /* Ensures image fits within the circle */
+  border: 3px solid #0077ff; /* Adds a border */
+  margin: 0 20px; /* Adjust spacing */
+  margin-right: 10px; /* Adjust specific spacing */
 }
+
