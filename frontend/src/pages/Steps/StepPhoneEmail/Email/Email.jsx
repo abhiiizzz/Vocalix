@@ -1,7 +1,7 @@
 import React from 'react'
 import Card from '../../../../components/shared/Card/Card';
 import Button from '../../../../components/shared/Button/Button';
-import TextInput from "../../../../components/TextInput/TextInput";
+import TextInput from "../../../../components/shared/TextInput/TextInput";
 import styles from '../StepPhoneEmail.module.css';
 import { useState } from 'react';
 const Email = () => {

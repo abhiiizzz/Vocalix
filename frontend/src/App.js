@@ -10,6 +10,7 @@ import Rooms from "./pages/Rooms/Rooms";
 import { useSelector } from "react-redux";
 import { useLoadingWithRefresh } from "./hooks/useLoadingWithRefresh";
 import Loader from "./components/shared/Loader/Loader";
+import Room from "./pages/Room/Room";
 
 function App() {
   
@@ -27,6 +28,7 @@ function App() {
         {GuestRoute("/authenticate", <Authenticate />, isAuth)}
         {SemiProtectedRoute("/activate", <Activate />, isAuth, user)}
         {ProtectedRoute("/rooms", <Rooms />, isAuth, user)}
+        {ProtectedRoute("/room/:id", <Room />, isAuth, user)}
         {/* Optional: Handle undefined routes */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

@@ -1,6 +1,6 @@
 import React,{useState} from 'react'
 import Card from "../../../components/shared/Card/Card";
-import TextInput from '../../../components/TextInput/TextInput';
+import TextInput from '../../../components/shared/TextInput/TextInput';
 import Button from "../../../components/shared/Button/Button";
 import styles from "./StepOTP.module.css";
 import { useDispatch } from "react-redux";
