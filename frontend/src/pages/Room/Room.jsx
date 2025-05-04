@@ -1,22 +1,38 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useWebRTC } from "../../hooks/useWebRTC";
 import { useParams, useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
 import styles from "./Room.module.css";
+import { getRoom } from "../../http";
 
 const Room = () => {
   const { id: roomId } = useParams();
   const navigate = useNavigate();
+  const [room, setRoom] = useState(null);
   const user = useSelector((state) => state.auth.user);
-  const { clients, provideRef, muteClient, unmuteClient, leaveRoom } =
-    useWebRTC(roomId, user);
+  // removeClient is now provided from useWebRTC.
+  const {
+    clients,
+    provideRef,
+    muteClient,
+    unmuteClient,
+    leaveRoom,
+    removeClient,
+  } = useWebRTC(roomId, user);
+
+  useEffect(() => {
+    const fetchRoom = async () => {
+      const { data } = await getRoom(roomId);
+      setRoom(data);
+    };
+    fetchRoom();
+  }, [roomId]);
 
   // Local state for toggle buttons.
   const [localMicMuted, setLocalMicMuted] = useState(false);
-  const [remoteSpeakerMuted, setRemoteSpeakerMuted] = useState({}); // mapping: peerId => boolean
+  const [remoteSpeakerMuted, setRemoteSpeakerMuted] = useState({});
 
   const handleLocalMicToggle = () => {
-    // Find the local client's peerId.
     const localClient = clients.find((c) => c.isLocal);
     if (!localClient) return;
     if (localMicMuted) {
@@ -39,6 +55,12 @@ const Room = () => {
     }
   };
 
+  // Handler for removing a user.
+  const handleRemoveUser = (peerId) => {
+    // Optionally, add a confirmation dialog here.
+    removeClient(peerId);
+  };
+
   const handleLeaveRoom = () => {
     leaveRoom();
     navigate("/");
@@ -47,7 +69,10 @@ const Room = () => {
   return (
     <div className={styles.container}>
       <div className={styles.header}>
-        <h1>Room: {roomId}</h1>
+        <div className="flex flex-col gap-4">
+          <h1 className="text-nowrap bg-red-500">Room: {roomId}</h1>
+          <h2 className="text-nowrap bg-blue-500">Room Topic: {room?.topic}</h2>
+        </div>
         <button className={styles.leaveButton} onClick={handleLeaveRoom}>
           Leave Room
         </button>
@@ -80,18 +105,29 @@ const Room = () => {
                   {localMicMuted ? "Mic On" : "Mic Off"}
                 </button>
               ) : (
-                <button
-                  className={`${styles.controlButton} ${
-                    remoteSpeakerMuted[client.peerId]
-                      ? styles.activeButton
-                      : styles.inactiveButton
-                  }`}
-                  onClick={() => handleRemoteSpeakerToggle(client.peerId)}
-                >
-                  {remoteSpeakerMuted[client.peerId]
-                    ? "Speaker On"
-                    : "Speaker Off"}
-                </button>
+                <>
+                  <button
+                    className={`${styles.controlButton} ${
+                      remoteSpeakerMuted[client.peerId]
+                        ? styles.activeButton
+                        : styles.inactiveButton
+                    }`}
+                    onClick={() => handleRemoteSpeakerToggle(client.peerId)}
+                  >
+                    {remoteSpeakerMuted[client.peerId]
+                      ? "Speaker On"
+                      : "Speaker Off"}
+                  </button>
+                  {/* Only room owner sees "Remove User" for non-local clients */}
+                  {room?.ownerId === user._id && !client.isLocal && (
+                    <button
+                      className={styles.controlButton}
+                      onClick={() => handleRemoveUser(client.peerId)}
+                    >
+                      Remove User
+                    </button>
+                  )}
+                </>
               )}
             </div>
           </div>

@@ -1,6 +1,8 @@
 const crypto = require("crypto");
 const hashService = require("./hash-service");
+const nodemailer = require("nodemailer");
 const smsSid = process.env.SMS_SID;
+
 const smsAuthToken = process.env.SMS_AUTH_TOKEN;
 const twilio = require("twilio")(smsSid, smsAuthToken, {
   lazyloading: true,
@@ -17,6 +19,27 @@ class OtpService {
       from: process.env.SMS_FROM_NUMBER,
       body: `Your Vocalix OTP is ${otp}`,
     });
+  }
+
+  async sendByEmail(email, otp) {
+    const transporter = nodemailer.createTransport({
+      host: process.env.EMAIL_HOST,
+      port: 587,
+
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS,
+      },
+    });
+
+    const mailOptions = {
+      from: process.env.EMAIL_FROM,
+      to: email,
+      subject: "Your Vocalix OTP",
+      text: `Your Vocalix OTP is ${otp}`,
+    };
+
+    await transporter.sendMail(mailOptions);
   }
 
   verifyOtp(hashedOtp, data) {
