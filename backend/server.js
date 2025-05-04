@@ -35,14 +35,15 @@ app.get("/", (req, res) => {
 // Mapping of socket.id to user data.
 const socketUserMapping = {};
 
-// NEW: updatePeerList function that deduplicates entries by user.id,
-// selecting the connection with the most recent joinTime.
+// updatePeerList: emits only sockets that have valid user mapping.
 const updatePeerList = (roomId) => {
   const clientsInRoom = Array.from(io.sockets.adapter.rooms.get(roomId) || []);
-  const peerList = clientsInRoom.map((clientId) => ({
-    ...socketUserMapping[clientId],
-    peerId: clientId,
-  }));
+  const peerList = clientsInRoom
+    .filter((clientId) => socketUserMapping[clientId])
+    .map((clientId) => ({
+      ...socketUserMapping[clientId],
+      peerId: clientId,
+    }));
   io.in(roomId).emit(ACTIONS.PEER_LIST, peerList);
 };
 
@@ -70,7 +71,7 @@ io.on("connection", (socket) => {
     });
     socket.join(roomId);
     console.log(`Socket ${socket.id} joined room ${roomId}`);
-    // NEW: Broadcast the updated deduplicated peer list.
+    // Broadcast the updated peer list.
     updatePeerList(roomId);
   });
 
@@ -96,8 +97,6 @@ io.on("connection", (socket) => {
     delete socketUserMapping[socket.id];
   });
 
-  //socket.on(ACTIONS.LEAVE, leaveRoom);
-
   socket.on("disconnect", () => {
     socket.rooms.forEach((room) => {
       if (room !== socket.id) {
@@ -105,6 +104,28 @@ io.on("connection", (socket) => {
       }
     });
     delete socketUserMapping[socket.id];
+  });
+
+  socket.on(ACTIONS.REMOVE_PEER, ({ peerId, roomId }) => {
+    console.log(
+      `Socket ${socket.id} requested removal of peer ${peerId} from room ${roomId}`
+    );
+    // Notify the targeted socket that it has been removed.
+    io.to(peerId).emit(ACTIONS.REMOVED, { peerId });
+
+    // Get the targeted socket.
+    const targetSocket = io.sockets.sockets.get(peerId);
+    if (targetSocket) {
+      // Force the targeted socket to leave the room and disconnect.
+      targetSocket.leave(roomId);
+      targetSocket.disconnect(true);
+    }
+
+    // Update the peer list for everyone.
+    updatePeerList(roomId);
+
+    // Remove the targeted socket from the mapping.
+    delete socketUserMapping[peerId];
   });
 });
 

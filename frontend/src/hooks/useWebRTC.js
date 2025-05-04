@@ -11,7 +11,7 @@ export const useWebRTC = (roomId, user) => {
   const localMediaStream = useRef(null);
   const socket = useRef(null);
 
-  // Add a client to state if not already present.
+  // Add a client if not already present.
   const addNewClient = useCallback((newClient, callback) => {
     setClients((existingClients) => {
       if (
@@ -23,10 +23,9 @@ export const useWebRTC = (roomId, user) => {
     }, callback);
   }, []);
 
-  // When a new peer joins, add them to state and set up a connection.
+  // Setup a new peer connection.
   const handleNewPeer = useCallback(
     async ({ peerId, user: remoteUser, createOffer }) => {
-      // Immediately add the remote user (with unique peerId) to state.
       addNewClient({ ...remoteUser, peerId });
 
       if (connections.current[peerId]) {
@@ -34,13 +33,11 @@ export const useWebRTC = (roomId, user) => {
         return;
       }
 
-      // Create a new RTCPeerConnection.
       const pc = new RTCPeerConnection({
         iceServers: freeice(),
       });
       connections.current[peerId] = pc;
 
-      // Relay ICE candidates.
       pc.onicecandidate = (event) => {
         socket.current.emit(ACTIONS.RELAY_ICE, {
           peerId,
@@ -48,7 +45,6 @@ export const useWebRTC = (roomId, user) => {
         });
       };
 
-      // When a remote track is received, store and attach it.
       pc.ontrack = ({ streams: [remoteStream] }) => {
         remoteStreams.current[peerId] = remoteStream;
         if (audioElements.current[peerId]) {
@@ -56,12 +52,10 @@ export const useWebRTC = (roomId, user) => {
         }
       };
 
-      // Add local audio tracks to the connection.
       localMediaStream.current.getTracks().forEach((track) => {
         pc.addTrack(track, localMediaStream.current);
       });
 
-      // If instructed, create and send an offer.
       if (createOffer) {
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
@@ -87,7 +81,6 @@ export const useWebRTC = (roomId, user) => {
       await connection.setRemoteDescription(
         new RTCSessionDescription(remoteSessionDescription)
       );
-      // If an offer is received, answer it.
       if (remoteSessionDescription.type === "offer") {
         const answer = await connection.createAnswer();
         await connection.setLocalDescription(answer);
@@ -100,7 +93,7 @@ export const useWebRTC = (roomId, user) => {
     []
   );
 
-  // Remove only the peer that left using its peerId.
+  // Remove a peer connection and update state.
   const handleRemovePeer = useCallback(({ peerId }) => {
     if (connections.current[peerId]) {
       connections.current[peerId].close();
@@ -111,12 +104,17 @@ export const useWebRTC = (roomId, user) => {
     setClients((list) => list.filter((client) => client.peerId !== peerId));
   }, []);
 
+  // Remove a client (kick user) by emitting to the server.
+  const removeClient = (peerId) => {
+    socket.current.emit(ACTIONS.REMOVE_PEER, { peerId, roomId });
+    handleRemovePeer({ peerId });
+  };
+
   useEffect(() => {
     socket.current = socketInit();
 
-    // Listen for the full peer list.
+    // Listen for full peer list updates.
     socket.current.on(ACTIONS.PEER_LIST, (peerList) => {
-      // Mark the local client.
       const newList = peerList.map((client) =>
         client.peerId === socket.current.id
           ? { ...client, isLocal: true }
@@ -125,7 +123,6 @@ export const useWebRTC = (roomId, user) => {
       setClients(newList);
       const newPeerIds = new Set(newList.map((client) => client.peerId));
 
-      // Close and remove stale connections.
       Object.keys(connections.current).forEach((peerId) => {
         if (!newPeerIds.has(peerId)) {
           connections.current[peerId].close();
@@ -134,10 +131,9 @@ export const useWebRTC = (roomId, user) => {
         }
       });
 
-      // For every remote peer that doesn't have a connection, create one.
       newList.forEach((client) => {
         if (!client.peerId) return;
-        if (client.peerId === socket.current.id) return; // skip local
+        if (client.peerId === socket.current.id) return;
         if (!connections.current[client.peerId]) {
           const pc = new RTCPeerConnection({ iceServers: freeice() });
           connections.current[client.peerId] = pc;
@@ -158,7 +154,6 @@ export const useWebRTC = (roomId, user) => {
             pc.addTrack(track, localMediaStream.current);
           });
 
-          // Simple rule: if local socket id is less than remote peer id, create offer.
           if (socket.current.id < client.peerId) {
             pc.createOffer()
               .then((offer) => pc.setLocalDescription(offer))
@@ -199,6 +194,15 @@ export const useWebRTC = (roomId, user) => {
       }
     );
 
+    // Listen for a REMOVED event from the server.
+    socket.current.on(ACTIONS.REMOVED, ({ peerId }) => {
+      if (peerId === socket.current.id) {
+        leaveRoom();
+      } else {
+        handleRemovePeer({ peerId });
+      }
+    });
+
     const startCapture = async () => {
       try {
         localMediaStream.current = await navigator.mediaDevices.getUserMedia({
@@ -225,22 +229,18 @@ export const useWebRTC = (roomId, user) => {
   }, [roomId, user]);
 
   // Attach audio element reference.
-  // For the local user, assign the localMediaStream and force the element to be muted.
   const provideRef = (instance, peerId) => {
     audioElements.current[peerId] = instance;
     if (!instance) return;
     if (socket.current && peerId === socket.current.id) {
       instance.srcObject = localMediaStream.current;
-      instance.muted = true; // Self audio is always off.
-      instance.volume = 0; // Ensure volume is zero.
+      instance.muted = true;
+      instance.volume = 0;
     } else if (remoteStreams.current[peerId]) {
       instance.srcObject = remoteStreams.current[peerId];
     }
   };
 
-  // Mute/unmute functions:
-  // For the local user, toggling the mic disables/enables local audio tracks.
-  // For remote users, toggling speaker affects the local audio element muted state.
   const muteClient = (peerId) => {
     if (socket.current && peerId === socket.current.id) {
       localMediaStream.current.getAudioTracks().forEach((track) => {
@@ -267,7 +267,7 @@ export const useWebRTC = (roomId, user) => {
     const clientAudio = audioElements.current[peerId];
     if (clientAudio) {
       if (socket.current && peerId === socket.current.id) {
-        clientAudio.muted = true; // keep self muted
+        clientAudio.muted = true;
         clientAudio.volume = 0;
       } else {
         clientAudio.muted = false;
@@ -279,5 +279,12 @@ export const useWebRTC = (roomId, user) => {
     socket.current.emit(ACTIONS.LEAVE, { roomId });
   };
 
-  return { clients, provideRef, muteClient, unmuteClient, leaveRoom };
+  return {
+    clients,
+    provideRef,
+    muteClient,
+    unmuteClient,
+    leaveRoom,
+    removeClient,
+  };
 };

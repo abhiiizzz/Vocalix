@@ -21,7 +21,7 @@ class AuthController {
     const hash = hashService.hashOtp(data);
 
     try {
-      // await OtpService.sendBySms(phone,otp);
+       await OtpService.sendBySms(phone,otp);
       res.json({
         hash: `${hash}.${expires}`,
         phone,
@@ -32,6 +32,64 @@ class AuthController {
       res.status(500).json({ message: "Message sending failed.." });
     }
   }
+
+  async verifyEmailOtp(req, res) {
+    const { otp, hash, email } = req.body;
+
+    // Validate request body
+    if (!otp || !hash || !email) {
+      return res.status(400).json({ message: "All fields are required!" }); // Add 'return'
+    }
+
+    const [hashedOtp, expires] = hash.split(".");
+    if (Date.now() > +expires) {
+      return res.status(400).json({ message: "OTP expired!" }); // Add 'return'
+    }
+
+    // Verify OTP
+    const data = `${email}.${otp}.${expires}`;
+    const isValid = otpService.verifyOtp(hashedOtp, data);
+    if (!isValid) {
+      return res.status(400).json({ message: "Invalid OTP" }); // Add 'return'
+    }
+
+    // Find or create user
+    let user;
+    try {
+      user = await userService.findUser({ email });
+      if (!user) {
+        user = await userService.createUser({ email });
+      }
+    } catch (err) {
+      console.error(err);
+      return res.status(500).json({ message: "Database error" }); // Add 'return'
+    }
+
+    // Generate tokens
+    const { accessToken, refreshToken } = tokenService.generateTokens({
+      _id: user._id,
+      activated: false,
+    });
+
+    await tokenService.storeRefreshToken(refreshToken, user._id);
+
+    // Set refresh token as cookie and send access token
+    res.cookie("refreshToken", refreshToken, {
+      maxAge: 1000 * 60 * 60 * 24 * 30,
+      httpOnly: true,
+    });
+
+    res.cookie("accessToken", accessToken, {
+      maxAge: 1000 * 60 * 60 * 24 * 30,
+      httpOnly: true,
+    });
+
+    const userDto = new UserDto(user);
+
+    return res.json({ aauth: true, user: userDto });
+  }
+
+  
 
   async verifyOtp(req, res) {
     const { otp, hash, phone } = req.body;
@@ -139,12 +197,11 @@ class AuthController {
     res.json({ user: userDto, auth: true });
   }
 
-  async logout(req, res) 
-  {
+  async logout(req, res) {
     const { refreshToken } = req.cookies;
-    
+
     await tokenService.removeToken(refreshToken);
-    
+
     res.clearCookie("refreshToken");
     res.clearCookie("accessToken");
     res.json({ user: null, auth: false });

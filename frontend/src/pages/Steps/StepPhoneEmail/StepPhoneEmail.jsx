@@ -9,7 +9,7 @@ const phoneEmailMap = {
 };
 
 const StepPhoneEmail = ({ onNext }) => {
-  const [type, setType] = useState("phone");
+  const [type, setType] = useState("email");
   const Component = phoneEmailMap[type];
 
   return (
@@ -17,14 +17,6 @@ const StepPhoneEmail = ({ onNext }) => {
       <div className={styles.cardWrapper}>
         <div>
           <div className={styles.buttonWrap}>
-            <button
-              className={`${styles.tabButton} ${
-                type === "phone" ? styles.active : ""
-              }`}
-              onClick={() => setType("phone")}
-            >
-              <img src="/images/phone-white.png" alt="phone" />
-            </button>
             <button
               className={`${styles.tabButton} ${
                 type === "email" ? styles.active : ""
